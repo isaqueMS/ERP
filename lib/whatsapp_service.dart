@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
+import 'core/secrets.dart';
 
 class WhatsAppServiceResponse {
   final bool success;
@@ -8,8 +9,8 @@ class WhatsAppServiceResponse {
 }
 
 class WhatsAppService {
-  static const String _accessToken = 'EAAUP7nMpXDABRBISuT4FvZAd50IUUd2Vy1att2AZB2afyd2XT2QQyyGskKQofI7ZC7dOY8y2LofL6BejOIZAij8TY5LdiirzDvFKOxVOSYboL6yZAkZC0QmNb57gm1cZALHo7J1Ubsw7wljjZAZCbuvbcC3kwEtiPBzAgWUx5ZBpiXrlBy5NkkWGZBPmKR0AC6xpsZCYSzOaI2QAqXVmL2GZC3a6JRkwYbwwrEHgU6MXQcxi8Dxd3rCM2IuCkWYyl7hbZAd16ZB7ICAQITA1uiLow3OGlwI';
-  static const String _phoneNumberId = '1025304267340470';
+  static const String _accessToken = AppSecrets.whatsappToken;
+  static const String _phoneNumberId = AppSecrets.whatsappPhoneId;
   static const String _apiUrl = 'https://graph.facebook.com/v21.0/$_phoneNumberId/messages';
 
   static Future<WhatsAppServiceResponse> sendTemplateMessage({
