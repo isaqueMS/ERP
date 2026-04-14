@@ -411,6 +411,7 @@ class _ClientProfileSheetState extends State<_ClientProfileSheet> {
         result = await WhatsAppService.sendTemplateMessage(
           to: _clientPhone, 
           templateName: templateName,
+          headerImageUrl: 'https://img.freepik.com/vetores-premium/logotipo-do-estudio-de-beleza-flores-de-cerejeira_23-2148507567.jpg',
         );
       } else {
         result = await WhatsAppService.sendTextMessage(to: _clientPhone, message: message ?? '');

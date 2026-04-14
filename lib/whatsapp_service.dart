@@ -17,6 +17,7 @@ class WhatsAppService {
     required String to,
     required String templateName,
     List<String> bodyParameters = const [],
+    String? headerImageUrl,
   }) async {
     String cleanNumber = to.replaceAll(RegExp(r'\D'), '');
     
@@ -29,9 +30,19 @@ class WhatsAppService {
       "to": cleanNumber,
       "type": "template",
       "template": {
-        "name": "hello_world",
-        "language": {"code": "en_US"},
+        "name": templateName,
+        "language": {"code": "en"},
         "components": [
+          if (headerImageUrl != null)
+            {
+              "type": "header",
+              "parameters": [
+                {
+                  "type": "image",
+                  "image": {"link": headerImageUrl}
+                }
+              ]
+            },
           if (bodyParameters.isNotEmpty)
             {
               "type": "body",
