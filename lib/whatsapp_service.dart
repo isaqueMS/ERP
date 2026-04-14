@@ -30,7 +30,7 @@ class WhatsAppService {
       "type": "template",
       "template": {
         "name": templateName,
-        "language": {"code": "en"},
+        "language": {"code": "pt_BR"},
         "components": [
           if (bodyParameters.isNotEmpty)
             {
@@ -58,10 +58,16 @@ class WhatsAppService {
       } else {
         String errorMsg = 'Erro ${response.statusCode}';
         if (responseData['error'] != null) {
-          int code = responseData['error']['code'];
+          int code = responseData['error']['code'] ?? 0;
           String apiMsg = responseData['error']['message'] ?? '';
           errorMsg = 'Erro Meta #$code: $apiMsg';
           
+          // Adiciona detalhes adicionais se existirem (ex: erro de parâmetro)
+          if (responseData['error']['error_data'] != null && 
+              responseData['error']['error_data']['details'] != null) {
+            errorMsg += ' - Detalhe: ${responseData['error']['error_data']['details']}';
+          }
+
           if (code == 131030) {
             errorMsg = 'Número não autorizado na lista de testes da Meta.';
           }
