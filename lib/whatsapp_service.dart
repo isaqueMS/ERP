@@ -29,7 +29,7 @@ class WhatsAppService {
       "to": cleanNumber,
       "type": "template",
       "template": {
-        "name": templateName,
+        "name": "hello_world",
         "language": {"code": "en_US"},
         "components": [
           if (bodyParameters.isNotEmpty)

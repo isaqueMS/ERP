@@ -1,0 +1,11 @@
+{
+  "messaging_product": "whatsapp",
+  "to": "5571991217251",
+  "type": "template",
+  "template": {
+    "name": "studio",
+    "language": {
+      "code": "en"
+    }
+  }
+}
