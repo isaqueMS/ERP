@@ -79,7 +79,7 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
         result = await WhatsAppService.sendTemplateMessage(
           to: phone,
           templateName: 'studio',
-          headerImageUrl: 'https://img.freepik.com/vetores-premium/logotipo-do-estudio-de-beleza-flores-de-cerejeira_23-2148507567.jpg',
+          headerImageUrl: 'https://scontent.whatsapp.net/v/t61.29466-34/534425705_1671523183866510_9020856625431338405_n.png?ccb=1-7&_nc_sid=8b1bef&_nc_eui2=AeEtdne-nLZjg2wVj1ygC21kjnINhIvEhFKOcg2Ei8SEUs9OkMIbic4JV8XVmtG5B-25OjdQ5AOgJHiQ7tM8BPRV&_nc_ohc=6ia0BSMfGG8Q7kNvwEI27YT&_nc_oc=AdqOH2qGQLs5z-OBXytJ-N95kXQfjMi88W9hMeArJKqN6iaiNVtZs9-9F34BIVf1-6c&_nc_zt=3&_nc_ht=scontent.whatsapp.net&_nc_gid=f4az17T2h7V0osOAJrxUqg&_nc_ss=7a3a8&oh=01_Q5Aa4QEvjMNHvNbuDLTEKWK1JcpSteIkU-MrBEL6QpC3eUcTYA&oe=6A05F7BF',
         );
       } else {
         result = await WhatsAppService.sendTextMessage(
