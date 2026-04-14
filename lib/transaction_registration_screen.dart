@@ -5,7 +5,8 @@ import 'fluunt_drawer.dart';
 
 class TransactionRegistrationScreen extends StatefulWidget {
   final Function(int)? onNavigation;
-  const TransactionRegistrationScreen({super.key, this.onNavigation});
+  final String userRole;
+  const TransactionRegistrationScreen({super.key, this.onNavigation, this.userRole = 'agente'});
 
   @override
   State<TransactionRegistrationScreen> createState() => _TransactionRegistrationScreenState();
@@ -173,6 +174,7 @@ class _TransactionRegistrationScreenState extends State<TransactionRegistrationS
       drawer: FluuntDrawer(
         selectedIndex: 6,
         onDestinationSelected: widget.onNavigation ?? (i) {},
+        userRole: widget.userRole,
       ),
       appBar: AppBar(
         backgroundColor: Colors.transparent,

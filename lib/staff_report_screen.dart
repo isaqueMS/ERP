@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:intl/intl.dart';
 import 'fluunt_drawer.dart';
 
 class StaffReportScreen extends StatefulWidget {
   final Function(int)? onNavigation;
-  const StaffReportScreen({super.key, this.onNavigation});
+  final String userRole;
+  const StaffReportScreen({super.key, this.onNavigation, this.userRole = 'agente'});
 
   @override
   State<StaffReportScreen> createState() => _StaffReportScreenState();
@@ -51,10 +53,33 @@ class _StaffReportScreenState extends State<StaffReportScreen> {
   Future<void> _loadStaff() async {
     setState(() => _isLoadingStaff = true);
     final snap = await FirebaseFirestore.instance.collection('staff').orderBy('name').get();
-    setState(() {
-      _staffList = snap.docs.map((d) => {'_docId': d.id, ...d.data()}).toList();
-      _isLoadingStaff = false;
-    });
+    final allStaff = snap.docs.map((d) => {'_docId': d.id, ...d.data()}).toList();
+    
+    if (mounted) {
+      setState(() {
+        _staffList = allStaff;
+        _isLoadingStaff = false;
+      });
+
+      // Se for agente, auto-seleciona a si mesmo
+      if (widget.userRole == 'agente') {
+        final user = FirebaseAuth.instance.currentUser;
+        if (user != null) {
+          final email = (user.email ?? '').trim().toLowerCase();
+          final me = _staffList.firstWhere(
+            (s) => (s['email'] as String? ?? '').toLowerCase().trim() == email,
+            orElse: () => {},
+          );
+          if (me.isNotEmpty) {
+            setState(() {
+              _selectedStaff = me;
+              _selectedStaffDocId = me['_docId'];
+            });
+            _loadReport();
+          }
+        }
+      }
+    }
   }
 
   Future<void> _loadReport() async {
@@ -128,12 +153,17 @@ class _StaffReportScreenState extends State<StaffReportScreen> {
   }
 
   void _showStaffPicker() {
+    // Filtrar a lista se for agente
+    final List<Map<String, dynamic>> displayList = widget.userRole == 'agente'
+        ? _staffList.where((s) => (s['email'] as String? ?? '').toLowerCase().trim() == (FirebaseAuth.instance.currentUser?.email ?? '').toLowerCase().trim()).toList()
+        : _staffList;
+
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
       isScrollControlled: true,
       builder: (ctx) => Container(
-        height: MediaQuery.of(ctx).size.height * 0.6,
+        height: MediaQuery.of(ctx).size.height * 0.7,
         decoration: const BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.vertical(top: Radius.circular(32)),
@@ -141,27 +171,22 @@ class _StaffReportScreenState extends State<StaffReportScreen> {
         child: Column(
           children: [
             const SizedBox(height: 12),
-            Container(
-              width: 40, height: 4,
-              decoration: BoxDecoration(color: Colors.grey[300], borderRadius: BorderRadius.circular(2)),
+            Container(width: 40, height: 4, decoration: BoxDecoration(color: Colors.grey.withOpacity(0.3), borderRadius: BorderRadius.circular(2))),
+            const SizedBox(height: 20),
+            Text(
+              widget.userRole == 'agente' ? 'CONFIRMAR MEU PERFIL' : 'SELECIONAR PROFISSIONAL',
+              style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 13, letterSpacing: 1),
             ),
             const SizedBox(height: 20),
-            const Text(
-              'SELECIONAR PROFISSIONAL',
-              style: TextStyle(fontSize: 12, fontWeight: FontWeight.w900, color: Colors.grey, letterSpacing: 2),
-            ),
-            const SizedBox(height: 16),
-            const Divider(height: 1),
             Expanded(
-              child: _isLoadingStaff
-                  ? const Center(child: CircularProgressIndicator())
-                  : ListView.separated(
-                      itemCount: _staffList.length,
-                      separatorBuilder: (_, __) => const Divider(height: 1, indent: 24, endIndent: 24),
-                      itemBuilder: (ctx, i) {
-                        final staff = _staffList[i];
-                        final isSelected = staff['_docId'] == _selectedStaffDocId;
-                        final commissionPct = (staff['commission'] as num?)?.toInt() ?? 0;
+              child: displayList.isEmpty
+                  ? const Center(child: Text('Nenhum profissional encontrado.'))
+                  : ListView.builder(
+                      itemCount: displayList.length,
+                      itemBuilder: (context, index) {
+                        final staff = displayList[index];
+                        final isSelected = _selectedStaffDocId == staff['_docId'];
+                        final int commissionPct = (staff['commission'] as num?)?.toInt() ?? 0;
                         return ListTile(
                           contentPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
                           leading: CircleAvatar(
@@ -207,6 +232,7 @@ class _StaffReportScreenState extends State<StaffReportScreen> {
       drawer: FluuntDrawer(
         selectedIndex: 8,
         onDestinationSelected: widget.onNavigation ?? (i) {},
+        userRole: widget.userRole,
       ),
       appBar: AppBar(
         backgroundColor: Colors.transparent,
@@ -301,10 +327,11 @@ class _StaffReportScreenState extends State<StaffReportScreen> {
                         ],
                       ),
                     ),
-                    Icon(
-                      Icons.keyboard_arrow_down_rounded,
-                      color: hasSelection ? Colors.white54 : Colors.grey,
-                    ),
+                    if (widget.userRole == 'administrador' || !hasSelection)
+                      Icon(
+                        Icons.keyboard_arrow_down_rounded,
+                        color: hasSelection ? Colors.white54 : Colors.grey,
+                      ),
                   ],
                 ),
               ),

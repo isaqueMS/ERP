@@ -4,7 +4,8 @@ import 'fluunt_drawer.dart';
 
 class ServiceRegistrationScreen extends StatefulWidget {
   final Function(int)? onNavigation;
-  const ServiceRegistrationScreen({super.key, this.onNavigation});
+  final String userRole;
+  const ServiceRegistrationScreen({super.key, this.onNavigation, this.userRole = 'agente'});
 
   @override
   State<ServiceRegistrationScreen> createState() => _ServiceRegistrationScreenState();
@@ -74,6 +75,7 @@ class _ServiceRegistrationScreenState extends State<ServiceRegistrationScreen> {
       drawer: FluuntDrawer(
         selectedIndex: 3,
         onDestinationSelected: widget.onNavigation ?? (i) {},
+        userRole: widget.userRole,
       ),
       appBar: AppBar(
         backgroundColor: Colors.transparent,

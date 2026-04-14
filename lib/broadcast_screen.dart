@@ -2,10 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'whatsapp_service.dart';
 import 'fluunt_drawer.dart';
+import 'core/secrets.dart';
 
 class BroadcastScreen extends StatefulWidget {
   final Function(int)? onNavigation;
-  const BroadcastScreen({super.key, this.onNavigation});
+  final String userRole;
+  const BroadcastScreen({super.key, this.onNavigation, this.userRole = 'agente'});
 
   @override
   State<BroadcastScreen> createState() => _BroadcastScreenState();
@@ -52,7 +54,7 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
     });
   }
 
-  Future<void> _sendBulkMessages() async {
+  Future<void> _sendBulkMessages({bool useTemplate = true}) async {
     if (_selectedClients.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Selecione pelo menos um cliente.'), backgroundColor: _textPrimary),
@@ -62,7 +64,7 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
 
     setState(() {
       _isSending = true;
-      _lastLogs = '🚀 Iniciando transmissão...\n';
+      _lastLogs = '🚀 Iniciando transmissão (${useTemplate ? "Modelo" : "Livre"})...\n';
     });
     
     int successCount = 0;
@@ -71,11 +73,19 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
       final client = _clientsData.firstWhere((c) => c['phone'] == phone, orElse: () => {'name': 'Cliente'});
       setState(() => _lastLogs += 'Enviando para ${client['name']}...\n');
       
-      var result = await WhatsAppService.sendTemplateMessage(
-        to: phone,
-        templateName: _useTemplate ? _templateController.text.trim() : 'hello_world',
-        bodyParameters: _useTemplate ? [] : [client['name']],
-      );
+      WhatsAppServiceResponse result;
+      
+      if (useTemplate) {
+        result = await WhatsAppService.sendTemplateMessage(
+          to: phone,
+          templateName: 'studio',
+        );
+      } else {
+        result = await WhatsAppService.sendTextMessage(
+          to: phone,
+          message: _messageController.text.replaceAll('[NOME]', client['name']),
+        );
+      }
       
       setState(() {
         _lastLogs += result.success ? "   ✅ Sucesso!\n" : "   ❌ Falha: ${result.message}\n";
@@ -97,7 +107,7 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: _bg,
-      drawer: FluuntDrawer(selectedIndex: 9, onDestinationSelected: widget.onNavigation ?? (i) {}),
+      drawer: FluuntDrawer(selectedIndex: 9, onDestinationSelected: widget.onNavigation ?? (i) {}, userRole: widget.userRole),
       body: CustomScrollView(
         slivers: [
           SliverAppBar(
@@ -106,7 +116,13 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
             backgroundColor: _bg,
             elevation: 0,
             iconTheme: const IconThemeData(color: _textPrimary),
-            title: const Text('Compor Mensagem', style: TextStyle(color: _textPrimary, fontWeight: FontWeight.w900, fontSize: 18)),
+            title: Column(
+              children: [
+                const Text('Compor Mensagem', style: TextStyle(color: _textPrimary, fontWeight: FontWeight.w900, fontSize: 18)),
+                Text('ID ATIVO: ...${AppSecrets.whatsappPhoneId.substring(AppSecrets.whatsappPhoneId.length - 4)}', 
+                     style: const TextStyle(color: Colors.red, fontSize: 13, fontWeight: FontWeight.bold)),
+              ],
+            ),
             centerTitle: true,
           ),
 
@@ -202,33 +218,19 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
               ],
             ),
           ),
-          if (_useTemplate)
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20),
+            child: Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(color: _quartz.withOpacity(0.1), borderRadius: BorderRadius.circular(20)),
               child: TextField(
-                controller: _templateController,
-                decoration: InputDecoration(
-                  hintText: 'Nome do Template',
-                  filled: true,
-                  fillColor: _quartz.withOpacity(0.1),
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(15), borderSide: BorderSide.none),
-                ),
-              ),
-            )
-          else
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20),
-              child: Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(color: _quartz.withOpacity(0.1), borderRadius: BorderRadius.circular(20)),
-                child: TextField(
-                  controller: _messageController,
-                  maxLines: 4,
-                  style: const TextStyle(fontSize: 14, color: _textPrimary, height: 1.5),
-                  decoration: const InputDecoration(border: InputBorder.none, hintText: 'Escreva aqui...'),
-                ),
+                controller: _messageController,
+                maxLines: 4,
+                style: const TextStyle(fontSize: 14, color: _textPrimary, height: 1.5),
+                decoration: const InputDecoration(border: InputBorder.none, hintText: 'Escreva sua mensagem aqui ou use para preencher o modelo...'),
               ),
             ),
+          ),
           Padding(
             padding: const EdgeInsets.all(15),
             child: Wrap(
@@ -240,15 +242,53 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
               ],
             ),
           ),
+          // Botoes de Ação
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+            child: Row(
+              children: [
+                Expanded(
+                  child: ElevatedButton.icon(
+                    onPressed: _isSending ? null : () => _sendBulkMessages(useTemplate: true),
+                    icon: const Icon(Icons.rocket_launch, size: 16),
+                    label: const Text('Modelo Studio', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: _roseGold,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: ElevatedButton.icon(
+                    onPressed: _isSending ? null : () => _sendBulkMessages(useTemplate: false),
+                    icon: const Icon(Icons.send_rounded, size: 16),
+                    label: const Text('Texto Livre', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF25D366),
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
           if (_lastLogs.isNotEmpty)
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(15),
-              decoration: const BoxDecoration(
-                color: _textPrimary,
-                borderRadius: BorderRadius.only(bottomLeft: Radius.circular(30), bottomRight: Radius.circular(30)),
+            Padding(
+              padding: const EdgeInsets.all(20),
+              child: Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(15),
+                decoration: BoxDecoration(
+                  color: _textPrimary,
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Text(_lastLogs, style: const TextStyle(color: _roseGold, fontSize: 10, fontFamily: 'monospace')),
               ),
-              child: Text(_lastLogs, style: const TextStyle(color: _roseGold, fontSize: 10, fontFamily: 'monospace')),
             ),
         ],
       ),

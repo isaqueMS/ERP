@@ -4,7 +4,8 @@ import 'fluunt_drawer.dart';
 
 class ProductSaleScreen extends StatefulWidget {
   final Function(int)? onNavigation;
-  const ProductSaleScreen({super.key, this.onNavigation});
+  final String userRole;
+  const ProductSaleScreen({super.key, this.onNavigation, this.userRole = 'agente'});
 
   @override
   State<ProductSaleScreen> createState() => _ProductSaleScreenState();
@@ -82,7 +83,11 @@ class _ProductSaleScreenState extends State<ProductSaleScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: _bg,
-      drawer: FluuntDrawer(selectedIndex: 10, onDestinationSelected: widget.onNavigation ?? (i) {}),
+      drawer: FluuntDrawer(
+        selectedIndex: 10,
+        onDestinationSelected: widget.onNavigation ?? (i) {},
+        userRole: widget.userRole,
+      ),
       appBar: AppBar(
         title: const Text('Nova Venda', style: TextStyle(color: _textPrimary, fontWeight: FontWeight.bold)),
         backgroundColor: _bg,

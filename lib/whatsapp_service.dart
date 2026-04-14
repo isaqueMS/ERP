@@ -30,7 +30,7 @@ class WhatsAppService {
       "type": "template",
       "template": {
         "name": templateName,
-        "language": {"code": "pt_BR"},
+        "language": {"code": "en"},
         "components": [
           if (bodyParameters.isNotEmpty)
             {
@@ -56,13 +56,14 @@ class WhatsAppService {
       if (response.statusCode == 200 || response.statusCode == 201) {
         return WhatsAppServiceResponse(true, 'Enviado');
       } else {
-        String errorMsg = 'Erro desconhecido';
+        String errorMsg = 'Erro ${response.statusCode}';
         if (responseData['error'] != null) {
           int code = responseData['error']['code'];
+          String apiMsg = responseData['error']['message'] ?? '';
+          errorMsg = 'Erro Meta #$code: $apiMsg';
+          
           if (code == 131030) {
             errorMsg = 'Número não autorizado na lista de testes da Meta.';
-          } else {
-            errorMsg = responseData['error']['message'] ?? 'Erro na API';
           }
         }
         return WhatsAppServiceResponse(false, errorMsg);

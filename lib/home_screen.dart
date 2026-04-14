@@ -8,7 +8,9 @@ import 'fluunt_drawer.dart';
 
 class HomeScreen extends StatefulWidget {
   final Function(int)? onNavigation;
-  const HomeScreen({super.key, this.onNavigation});
+  final String userRole;
+  final String userName;
+  const HomeScreen({super.key, this.onNavigation, this.userRole = 'agente', this.userName = '...'});
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
@@ -40,6 +42,38 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       start: DateTime(now.year, now.month, now.day).subtract(const Duration(days: 7)),
       end: DateTime(now.year, now.month, now.day, 23, 59, 59),
     );
+
+    if (widget.userRole == 'agente') {
+      _loadAgentStaffId();
+    }
+  }
+
+  String? _agentStaffId;
+  bool _isLoadingAgentId = false;
+
+  Future<void> _loadAgentStaffId() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+    
+    setState(() => _isLoadingAgentId = true);
+    try {
+      final email = (user.email ?? '').trim().toLowerCase();
+      final snap = await FirebaseFirestore.instance
+          .collection('staff')
+          .where('email', isEqualTo: email)
+          .limit(1)
+          .get();
+      
+      if (snap.docs.isNotEmpty && mounted) {
+        setState(() {
+          _agentStaffId = snap.docs.first.id;
+        });
+      }
+    } catch (e) {
+      debugPrint("Erro ao carregar ID do agente na Home: $e");
+    } finally {
+      if (mounted) setState(() => _isLoadingAgentId = false);
+    }
   }
 
   @override
@@ -75,12 +109,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   }
 
   String _userName() {
-    final user = FirebaseAuth.instance.currentUser;
-    if (user == null) return '';
-    if (user.displayName != null && user.displayName!.isNotEmpty) return user.displayName!;
-    final email = user.email ?? '';
-    final name = email.split('@').first.replaceAll('.', ' ');
-    return name.split(' ').map((w) => w.isNotEmpty ? '${w[0].toUpperCase()}${w.substring(1)}' : '').join(' ');
+    return widget.userName;
   }
 
   @override
@@ -89,7 +118,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       value: SystemUiOverlayStyle.dark.copyWith(statusBarColor: Colors.transparent, statusBarIconBrightness: Brightness.dark),
       child: Scaffold(
         backgroundColor: _bg,
-        drawer: FluuntDrawer(selectedIndex: 0, onDestinationSelected: widget.onNavigation ?? (i) {}),
+        drawer: FluuntDrawer(selectedIndex: 0, onDestinationSelected: widget.onNavigation ?? (i) {}, userRole: widget.userRole),
         body: CustomScrollView(
           physics: const BouncingScrollPhysics(),
           slivers: [
@@ -209,6 +238,10 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
         StreamBuilder<QuerySnapshot>(
           stream: FirebaseFirestore.instance.collection('transactions').snapshots(),
           builder: (context, snapshot) {
+            if (widget.userRole == 'agente' && _isLoadingAgentId) {
+              return const Center(child: Padding(padding: EdgeInsets.all(20), child: CircularProgressIndicator(color: Colors.white24)));
+            }
+
             double totalIncome = 0;
             double totalExpense = 0;
 
@@ -225,14 +258,22 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                   date = DateTime.tryParse(rawDate);
                 }
                 
-                if (date != null && date.isAfter(range.start) && date.isBefore(range.end)) {
-                  final amount = (data['amount'] as num).toDouble();
-                  if (data['type'] == 'income') {
-                    totalIncome += amount;
-                  } else {
-                    totalExpense += amount;
+                  if (date != null && date.isAfter(range.start) && date.isBefore(range.end)) {
+                    // Filtro de Segurança por Cargo
+                    if (widget.userRole == 'agente' && data['professionalId'] != _agentStaffId) {
+                      continue;
+                    }
+
+                    final rawAmount = data['amount'];
+                    final amount = (rawAmount is num) ? rawAmount.toDouble() : 0.0;
+                    
+                    if (data['type'] == 'income') {
+                      totalIncome += amount;
+                    } else if (widget.userRole == 'administrador') {
+                      // Agente não soma despesas
+                      totalExpense += amount;
+                    }
                   }
-                }
               }
             }
 
@@ -249,9 +290,11 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      _statBubble(_currency.format(totalIncome), 'Entradas', Colors.greenAccent),
-                      _statBubble(_currency.format(totalExpense), 'Saídas', Colors.redAccent),
-                      _statBubble(_currency.format(totalIncome - totalExpense), 'Saldo', Colors.white),
+                      _statBubble(_currency.format(totalIncome), widget.userRole == 'agente' ? 'Minha Produção' : 'Entradas', Colors.greenAccent),
+                      if (widget.userRole == 'administrador') ...[
+                        _statBubble(_currency.format(totalExpense), 'Saídas', Colors.redAccent),
+                        _statBubble(_currency.format(totalIncome - totalExpense), 'Saldo', Colors.white),
+                      ],
                     ],
                   ),
                   const SizedBox(height: 20),

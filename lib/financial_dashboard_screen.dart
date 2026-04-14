@@ -1,11 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:intl/intl.dart';
 import 'fluunt_drawer.dart';
 
 class FinancialDashboardScreen extends StatefulWidget {
   final Function(int)? onNavigation;
-  const FinancialDashboardScreen({super.key, this.onNavigation});
+  final String userRole;
+  final String userName;
+  const FinancialDashboardScreen({super.key, this.onNavigation, this.userRole = 'agente', this.userName = '...'});
 
   @override
   State<FinancialDashboardScreen> createState() => _FinancialDashboardScreenState();
@@ -18,6 +21,9 @@ class _FinancialDashboardScreenState extends State<FinancialDashboardScreen> {
 
   final NumberFormat _currencyFormat = NumberFormat.currency(locale: 'pt_BR', symbol: 'R\$');
 
+  String? _agentStaffId;
+  bool _isLoadingAgentId = false;
+
   @override
   void initState() {
     super.initState();
@@ -27,6 +33,36 @@ class _FinancialDashboardScreenState extends State<FinancialDashboardScreen> {
       start: DateTime(now.year, now.month, 1),
       end: DateTime(now.year, now.month + 1, 0),
     );
+
+    if (widget.userRole == 'agente') {
+      _loadAgentStaffId();
+    }
+  }
+
+  Future<void> _loadAgentStaffId() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+    
+    setState(() => _isLoadingAgentId = true);
+    try {
+      final email = (user.email ?? '').trim().toLowerCase();
+      final snap = await FirebaseFirestore.instance
+          .collection('staff')
+          .where('email', isEqualTo: email)
+          .limit(1)
+          .get();
+      
+      if (snap.docs.isNotEmpty && mounted) {
+        setState(() {
+          _agentStaffId = snap.docs.first.id;
+          _selectedProfessionalId = _agentStaffId; // Fixa o filtro
+        });
+      }
+    } catch (e) {
+      debugPrint("Erro ao carregar ID do agente: $e");
+    } finally {
+      if (mounted) setState(() => _isLoadingAgentId = false);
+    }
   }
 
   Future<void> _selectDateRange() async {
@@ -60,13 +96,22 @@ class _FinancialDashboardScreenState extends State<FinancialDashboardScreen> {
       drawer: FluuntDrawer(
         selectedIndex: 7,
         onDestinationSelected: widget.onNavigation ?? (i) {},
+        userRole: widget.userRole,
       ),
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
-        title: const Text(
-          'DASHBOARD FINANCEIRO',
-          style: TextStyle(fontSize: 12, fontWeight: FontWeight.w900, letterSpacing: 2, color: Colors.grey),
+        title: Column(
+          children: [
+            const Text(
+              'DASHBOARD FINANCEIRO',
+              style: TextStyle(fontSize: 10, fontWeight: FontWeight.w900, letterSpacing: 2, color: Colors.grey),
+            ),
+            Text(
+              widget.userName.toUpperCase(),
+              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Color(0xFF4A3434)),
+            ),
+          ],
         ),
         centerTitle: true,
       ),
@@ -120,10 +165,12 @@ class _FinancialDashboardScreenState extends State<FinancialDashboardScreen> {
                 ),
               ),
               const SizedBox(width: 12),
-              _buildFilterIcon(Icons.person_outline, _selectedProfessionalId != null, _showProfessionalSelector),
-              const SizedBox(width: 8),
+              if (widget.userRole == 'administrador') ...[
+                _buildFilterIcon(Icons.person_outline, _selectedProfessionalId != null, _showProfessionalSelector),
+                const SizedBox(width: 8),
+              ],
               _buildFilterIcon(Icons.face_outlined, _selectedClientId != null, _showClientSelector),
-              if (_hasFilters) ...[
+              if (_hasFilters && widget.userRole == 'administrador') ...[
                 const SizedBox(width: 8),
                 _buildFilterIcon(Icons.close, false, _clearFilters, isAction: true),
               ]
@@ -159,6 +206,19 @@ class _FinancialDashboardScreenState extends State<FinancialDashboardScreen> {
   }
 
   Widget _buildDashboardContent() {
+    if (widget.userRole == 'agente' && _isLoadingAgentId) {
+      return const Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            CircularProgressIndicator(),
+            SizedBox(height: 16),
+            Text('Carregando seu perfil...', style: TextStyle(color: Colors.grey)),
+          ],
+        ),
+      );
+    }
+
     return StreamBuilder<QuerySnapshot>(
       stream: FirebaseFirestore.instance.collection('transactions').snapshots(),
       builder: (context, snapshot) {
@@ -179,7 +239,15 @@ class _FinancialDashboardScreenState extends State<FinancialDashboardScreen> {
                         date.isBefore(_selectedDateRange!.end.add(const Duration(days: 1)));
           }
 
-          bool matchProf = _selectedProfessionalId == null || data['professionalId'] == _selectedProfessionalId;
+          bool matchProf = true;
+          if (widget.userRole == 'agente') {
+            // Se for agente, OBRIGATÓRIO bater com o ID do agente carragado
+            matchProf = data['professionalId'] == _agentStaffId;
+          } else {
+            // Se for admin, segue o filtro selecionado (ou todos se null)
+            matchProf = _selectedProfessionalId == null || data['professionalId'] == _selectedProfessionalId;
+          }
+
           bool matchClient = _selectedClientId == null || data['clientId'] == _selectedClientId;
 
           return matchDate && matchProf && matchClient;

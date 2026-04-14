@@ -8,7 +8,8 @@ import 'whatsapp_service.dart';
 
 class ClientManagementScreen extends StatefulWidget {
   final Function(int)? onNavigation;
-  const ClientManagementScreen({super.key, this.onNavigation});
+  final String userRole;
+  const ClientManagementScreen({super.key, this.onNavigation, this.userRole = 'agente'});
 
   @override
   State<ClientManagementScreen> createState() => _ClientManagementScreenState();
@@ -53,7 +54,7 @@ class _ClientManagementScreenState extends State<ClientManagementScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: _bg,
-      drawer: FluuntDrawer(selectedIndex: 11, onDestinationSelected: widget.onNavigation ?? (i) {}),
+      drawer: FluuntDrawer(selectedIndex: 11, onDestinationSelected: widget.onNavigation ?? (i) {}, userRole: widget.userRole),
       body: CustomScrollView(
         physics: const BouncingScrollPhysics(),
         slivers: [
@@ -398,14 +399,23 @@ class _ClientProfileSheetState extends State<_ClientProfileSheet> {
     }
   }
 
-  Future<void> _sendWhatsApp(String message) async {
+  Future<void> _sendWhatsApp({String? templateName, String? message}) async {
     if (_clientPhone.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Cliente sem número de telefone cadastrado.'), backgroundColor: Colors.red));
       return;
     }
     setState(() => _sending = true);
     try {
-      final result = await WhatsAppService.sendTextMessage(to: _clientPhone, message: message);
+      WhatsAppServiceResponse result;
+      if (templateName != null) {
+        result = await WhatsAppService.sendTemplateMessage(
+          to: _clientPhone, 
+          templateName: templateName,
+        );
+      } else {
+        result = await WhatsAppService.sendTextMessage(to: _clientPhone, message: message ?? '');
+      }
+
       if (mounted) {
         if (result.success) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -460,14 +470,33 @@ class _ClientProfileSheetState extends State<_ClientProfileSheet> {
         ),
         actions: [
           TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancelar')),
+          // Botão 1: Template Oficial
           ElevatedButton.icon(
             onPressed: _sending ? null : () {
               Navigator.pop(context);
-              _sendWhatsApp(_msgController.text);
+              _sendWhatsApp(templateName: 'studio');
+            },
+            icon: const Icon(Icons.rocket_launch, size: 16),
+            label: const Text('Enviar Modelo Studio', style: TextStyle(fontWeight: FontWeight.bold)),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: _roseGold, 
+              foregroundColor: Colors.white, 
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))
+            ),
+          ),
+          // Botão 2: Texto Livre
+          ElevatedButton.icon(
+            onPressed: _sending ? null : () {
+              Navigator.pop(context);
+              _sendWhatsApp(message: _msgController.text);
             },
             icon: const Icon(Icons.send_rounded, size: 16),
-            label: const Text('Enviar via WhatsApp', style: TextStyle(fontWeight: FontWeight.bold)),
-            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF25D366), foregroundColor: Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
+            label: const Text('Enviar Texto Livre', style: TextStyle(fontWeight: FontWeight.bold)),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF25D366), 
+              foregroundColor: Colors.white, 
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))
+            ),
           ),
         ],
       ),

@@ -38,69 +38,70 @@ const AndroidNotificationChannel channel = AndroidNotificationChannel(
 final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin = FlutterLocalNotificationsPlugin();
 
 void main() async {
-  WidgetsFlutterBinding.ensureInitialized();
-  
-  // Inicializa o Firebase
-  await Firebase.initializeApp(
-    options: DefaultFirebaseOptions.currentPlatform,
-  );
+  try {
+    WidgetsFlutterBinding.ensureInitialized();
+    
+    // Inicializa o Firebase
+    await Firebase.initializeApp(
+      options: DefaultFirebaseOptions.currentPlatform,
+    );
 
-  // Inicializa Formatação de Data
-  await initializeDateFormatting('pt_BR', null);
+    // Inicializa Formatação de Data
+    initializeDateFormatting('pt_BR', null);
 
-  // Configuração das Notificações
-  FirebaseMessaging messaging = FirebaseMessaging.instance;
-  
-  // Inicializa notificações locais
-  await flutterLocalNotificationsPlugin
-      .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()
-      ?.createNotificationChannel(channel);
+    // Configuração básica do Messaging
+    FirebaseMessaging messaging = FirebaseMessaging.instance;
+    
+    // Inicializa notificações locais (sem travar se falhar)
+    try {
+      await flutterLocalNotificationsPlugin
+          .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()
+          ?.createNotificationChannel(channel);
 
-  const AndroidInitializationSettings initializationSettingsAndroid = AndroidInitializationSettings('@mipmap/ic_launcher');
-  const InitializationSettings initializationSettings = InitializationSettings(android: initializationSettingsAndroid);
-  await flutterLocalNotificationsPlugin.initialize(
-    settings: initializationSettings,
-  );
-
-  // Solicita permissão (iOS e Android 13+)
-  NotificationSettings settings = await messaging.requestPermission(
-    alert: true,
-    badge: true,
-    sound: true,
-  );
-
-  print('Permissão de notificação: ${settings.authorizationStatus}');
-
-  // Handler para quando o app está aberto (Foreground)
-  FirebaseMessaging.onMessage.listen((RemoteMessage message) {
-    RemoteNotification? notification = message.notification;
-    AndroidNotification? android = message.notification?.android;
-
-    if (notification != null && android != null) {
-      flutterLocalNotificationsPlugin.show(
-        id: notification.hashCode,
-        title: notification.title,
-        body: notification.body,
-        notificationDetails: NotificationDetails(
-          android: AndroidNotificationDetails(
-            channel.id,
-            channel.name,
-            channelDescription: channel.description,
-            icon: android.smallIcon,
-          ),
-        ),
+      const AndroidInitializationSettings initializationSettingsAndroid = AndroidInitializationSettings('@mipmap/ic_launcher');
+      const InitializationSettings initializationSettings = InitializationSettings(android: initializationSettingsAndroid);
+      await flutterLocalNotificationsPlugin.initialize(
+        settings: initializationSettings,
       );
+    } catch (e) {
+      debugPrint("Erro ao inicializar notificações locais: $e");
     }
-  });
 
-  // Configura o handler de background
-  FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
+    // Solicita permissão assincronamente (não bloqueia o runApp)
+    messaging.requestPermission(alert: true, badge: true, sound: true);
 
-  // Exemplo: Obtém o Token do Celular para testes
-  String? token = await messaging.getToken();
-  print("\n--- TOKEN PARA TESTE ---");
-  print("$token");
-  print("------------------------\n");
+    // Handlers
+    FirebaseMessaging.onMessage.listen((RemoteMessage message) {
+      RemoteNotification? notification = message.notification;
+      AndroidNotification? android = message.notification?.android;
+      if (notification != null && android != null) {
+        flutterLocalNotificationsPlugin.show(
+          id: notification.hashCode,
+          title: notification.title,
+          body: notification.body,
+          notificationDetails: NotificationDetails(
+            android: AndroidNotificationDetails(
+              channel.id, channel.name,
+              channelDescription: channel.description,
+              icon: android.smallIcon,
+            ),
+          ),
+        );
+      }
+    });
+
+    FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
+
+    // Log do token (sem bloquear o startup)
+    messaging.getToken().then((token) {
+      debugPrint("\n--- FCM TOKEN ---");
+      debugPrint("$token");
+      debugPrint("-----------------\n");
+    }).catchError((e) => debugPrint("Erro ao obter token FCM: $e"));
+
+  } catch (e) {
+    debugPrint("ERRO CRÍTICO NO STARTUP: $e");
+  }
 
   runApp(const FluuntApp());
 }
@@ -113,6 +114,28 @@ class FluuntApp extends StatelessWidget {
     return MaterialApp(
       title: 'Estúdio Alê',
       debugShowCheckedModeBanner: false,
+      builder: (context, child) {
+        ErrorWidget.builder = (FlutterErrorDetails details) {
+          return Scaffold(
+            body: Center(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.all(20),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Icon(Icons.error_outline, color: Colors.red, size: 50),
+                    const SizedBox(height: 10),
+                    const Text('Ocorreu um erro de renderização:', style: TextStyle(fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 10),
+                    Text(details.exception.toString(), style: const TextStyle(color: Colors.red, fontSize: 12)),
+                  ],
+                ),
+              ),
+            ),
+          );
+        };
+        return child!;
+      },
       theme: ThemeData(
         useMaterial3: true,
         colorScheme: ColorScheme.fromSeed(
@@ -154,27 +177,15 @@ class MainScreen extends StatefulWidget {
 class _MainScreenState extends State<MainScreen> {
   int _selectedIndex = 0;
   String _userRole = 'agente';
-
-  final List<Widget> _screens = [];
+  String _userDisplayName = '...';
 
   @override
   void initState() {
     super.initState();
-    _loadUserRole();
-    _screens.addAll([
-      HomeScreen(onNavigation: _onItemSelected),           // 0
-      ReservationWizard(onNavigation: _onItemSelected),    // 1
-      ClientRegistrationScreen(onNavigation: _onItemSelected), // 2
-      ServiceRegistrationScreen(onNavigation: _onItemSelected), // 3
-      StaffRegistrationScreen(onNavigation: _onItemSelected),   // 4
-      ProductRegistrationScreen(onNavigation: _onItemSelected), // 5
-      TransactionRegistrationScreen(onNavigation: _onItemSelected), // 6
-      FinancialDashboardScreen(onNavigation: _onItemSelected),  // 7
-      StaffReportScreen(onNavigation: _onItemSelected),         // 8
-      BroadcastScreen(onNavigation: _onItemSelected),           // 9
-      ProductSaleScreen(onNavigation: _onItemSelected),         // 10
-      ClientManagementScreen(onNavigation: _onItemSelected),    // 11
-    ]);
+    // Pequeno delay para estabilizar o emulador antes de carregar dados
+    Future.delayed(const Duration(milliseconds: 1500), () {
+      if (mounted) _loadUserRole();
+    });
   }
 
   Future<void> _loadUserRole() async {
@@ -201,13 +212,14 @@ class _MainScreenState extends State<MainScreen> {
         setState(() {
           final data = query.docs.first.data() as Map<String, dynamic>;
           _userRole = (data['role'] ?? 'agente').toString().toLowerCase().trim();
-          print("[MainScreen] Role set to: \$_userRole for \$email");
+          _userDisplayName = data['name'] ?? 'Usuário';
+          print("[MainScreen] Role: $_userRole, Name: $_userDisplayName");
         });
-      } else {
-        print("[MainScreen] Nenhum cargo encontrado para o email \$email");
+      } else if (mounted) {
+        print("[MainScreen] Nenhum cargo encontrado para o email $email");
       }
     } catch (e) {
-      print("[MainScreen] Erro ao carregar user role: \$e");
+      print("[MainScreen] Erro ao carregar user role: $e");
     }
   }
 
@@ -224,15 +236,35 @@ class _MainScreenState extends State<MainScreen> {
     setState(() => _selectedIndex = index);
   }
 
+  Widget _buildCurrentScreen() {
+    print("[MainScreen] Building screen for index: $_selectedIndex");
+    switch (_selectedIndex) {
+      case 0: return HomeScreen(onNavigation: _onItemSelected, userRole: _userRole, userName: _userDisplayName);
+      case 1: return ReservationWizard(onNavigation: _onItemSelected, userRole: _userRole);
+      case 2: return ClientRegistrationScreen(onNavigation: _onItemSelected, userRole: _userRole);
+      case 3: return ServiceRegistrationScreen(onNavigation: _onItemSelected, userRole: _userRole);
+      case 4: return StaffRegistrationScreen(onNavigation: _onItemSelected, userRole: _userRole);
+      case 5: return ProductRegistrationScreen(onNavigation: _onItemSelected, userRole: _userRole);
+      case 6: return TransactionRegistrationScreen(onNavigation: _onItemSelected, userRole: _userRole);
+      case 7: return FinancialDashboardScreen(onNavigation: _onItemSelected, userRole: _userRole, userName: _userDisplayName);
+      case 8: return StaffReportScreen(onNavigation: _onItemSelected, userRole: _userRole);
+      case 9: return BroadcastScreen(onNavigation: _onItemSelected, userRole: _userRole);
+      case 10: return ProductSaleScreen(onNavigation: _onItemSelected, userRole: _userRole);
+      case 11: return ClientManagementScreen(onNavigation: _onItemSelected, userRole: _userRole);
+      default: return HomeScreen(onNavigation: _onItemSelected, userRole: _userRole, userName: _userDisplayName);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    return _screens[_selectedIndex];
+    return _buildCurrentScreen();
   }
 }
 
 class ReservationWizard extends StatefulWidget {
   final Function(int)? onNavigation;
-  const ReservationWizard({super.key, this.onNavigation});
+  final String userRole;
+  const ReservationWizard({super.key, this.onNavigation, this.userRole = 'agente'});
 
   @override
   State<ReservationWizard> createState() => _ReservationWizardState();
@@ -361,6 +393,7 @@ class _ReservationWizardState extends State<ReservationWizard> {
       drawer: FluuntDrawer(
         selectedIndex: 1,
         onDestinationSelected: widget.onNavigation ?? (i) {},
+        userRole: widget.userRole,
       ),
       appBar: AppBar(
         backgroundColor: Colors.transparent,

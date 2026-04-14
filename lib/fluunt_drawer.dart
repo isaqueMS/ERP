@@ -6,61 +6,26 @@ import 'main.dart';
 class FluuntDrawer extends StatelessWidget {
   final int selectedIndex;
   final Function(int) onDestinationSelected;
+  final String userRole;
 
   const FluuntDrawer({
     super.key,
     required this.selectedIndex,
     required this.onDestinationSelected,
+    this.userRole = 'agente',
   });
 
   String _getUserDisplayName() {
-    final user = FirebaseAuth.instance.currentUser;
-    if (user == null) return '';
-    if (user.displayName != null && user.displayName!.isNotEmpty) return user.displayName!;
-    final email = user.email ?? '';
-    final namePart = email.split('@').first.replaceAll('.', ' ');
-    return namePart.split(' ').map((w) => w.isNotEmpty ? '${w[0].toUpperCase()}${w.substring(1)}' : '').join(' ');
-  }
-
-  Future<String> _getUserRole() async {
-    final user = FirebaseAuth.instance.currentUser;
-    if (user == null) {
-      print("[Role Check] Usuário não autenticado.");
-      return 'agente';
-    }
-    
-    final email = (user.email ?? '').trim().toLowerCase();
-    print("[Role Check] Buscando papel para o email: '\$email'");
-    
     try {
-      // 1. Tenta na coleção 'users'
-      QuerySnapshot query = await FirebaseFirestore.instance
-          .collection('users')
-          .where('email', isEqualTo: email)
-          .limit(1)
-          .get();
-          
-      // 2. Se não achar, tenta na coleção 'staff'
-      if (query.docs.isEmpty) {
-        query = await FirebaseFirestore.instance
-            .collection('staff')
-            .where('email', isEqualTo: email)
-            .limit(1)
-            .get();
-      }
-      
-      if (query.docs.isNotEmpty) {
-        final data = query.docs.first.data() as Map<String, dynamic>;
-        final role = data['role'] ?? 'agente';
-        print("[Role Check] Papel encontrado: '\$role'");
-        return role;
-      } else {
-        print("[Role Check] Nenhum documento encontrado para '\$email'. Mantendo 'agente'.");
-      }
+      final user = FirebaseAuth.instance.currentUser;
+      if (user == null) return 'Estúdio Alê';
+      if (user.displayName != null && user.displayName!.isNotEmpty) return user.displayName!;
+      final email = user.email ?? '';
+      final namePart = email.split('@').first.replaceAll('.', ' ');
+      return namePart.split(' ').map((w) => w.isNotEmpty ? '${w[0].toUpperCase()}${w.substring(1)}' : '').join(' ');
     } catch (e) {
-      print("[Role Check] Erro ao consultar firestore: \$e");
+      return 'Usuário';
     }
-    return 'agente';
   }
 
   // Páginas que o AGENTE pode acessar
@@ -81,85 +46,83 @@ class FluuntDrawer extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final role = userRole.toLowerCase().trim();
+    final isAdmin = role == 'administrador' || role == 'admin';
+    final roleBadge = isAdmin ? '👑 Admin' : '👤 Agente';
+
     return Drawer(
       backgroundColor: Colors.white,
-      child: FutureBuilder<String>(
-        future: _getUserRole(),
-        builder: (context, snapshot) {
-          final role = (snapshot.data ?? 'agente').toLowerCase().trim();
-          final isAdmin = role == 'administrador' || role == 'admin';
-          final roleBadge = isAdmin ? '👑 Admin' : '👤 Agente';
-
-          return ListView(
-            padding: EdgeInsets.zero,
-            children: [
-              DrawerHeader(
-                decoration: const BoxDecoration(color: Color(0xFFE5B5B5)), 
-                child: Center(
-                  child: Column(
+      child: ListView(
+        padding: EdgeInsets.zero,
+        children: [
+          DrawerHeader(
+            decoration: const BoxDecoration(color: Color(0xFFE5B5B5)),
+            child: Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Container(
+                    width: 60,
+                    height: 60,
+                    decoration: BoxDecoration(color: Colors.white.withOpacity(0.2), shape: BoxShape.circle),
+                    child: const Icon(Icons.auto_awesome, color: Colors.white, size: 30),
+                  ),
+                  const SizedBox(height: 10),
+                  const Text('Estúdio Alê',
+                      style: TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.w900, letterSpacing: -1)),
+                  Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
+                      Text(_getUserDisplayName(),
+                          style: const TextStyle(color: Colors.white70, fontSize: 12, fontWeight: FontWeight.w500)),
+                      const SizedBox(width: 8),
                       Container(
-                        width: 60, height: 60,
-                        decoration: BoxDecoration(color: Colors.white.withOpacity(0.2), shape: BoxShape.circle),
-                        child: const Icon(Icons.auto_awesome, color: Colors.white, size: 30),
-                      ),
-                      const SizedBox(height: 10),
-                      const Text('Estúdio Alê', style: TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.w900, letterSpacing: -1)),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Text(_getUserDisplayName(), style: const TextStyle(color: Colors.white70, fontSize: 12, fontWeight: FontWeight.w500)),
-                          const SizedBox(width: 8),
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                            decoration: BoxDecoration(
-                              color: isAdmin ? Colors.amber.withOpacity(0.3) : Colors.white.withOpacity(0.2),
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: Text(roleBadge, style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w700)),
-                          ),
-                        ],
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: isAdmin ? Colors.amber.withOpacity(0.3) : Colors.white.withOpacity(0.2),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Text(roleBadge,
+                            style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w700)),
                       ),
                     ],
                   ),
-                ),
+                ],
               ),
+            ),
+          ),
 
-              // Páginas de todos (agente + admin)
-              _buildItem(context, 0, Icons.home_rounded, 'Início', true),
-              _buildItem(context, 1, Icons.calendar_today, 'Nova Reserva', true),
+          // Páginas de todos (agente + admin)
+          _buildItem(context, 0, Icons.home_rounded, 'Início', true),
+          _buildItem(context, 1, Icons.calendar_today, 'Nova Reserva', true),
 
-              // Páginas somente Admin
-              if (isAdmin) _buildItem(context, 2, Icons.person_add, 'Cadastrar Cliente', true),
-              if (isAdmin) _buildItem(context, 3, Icons.room_service, 'Cadastrar Serviço', true),
-              if (isAdmin) _buildItem(context, 4, Icons.badge, 'Equipe', true),
-              
-              _buildItem(context, 5, Icons.inventory_2, 'Produtos', true),
+          // Páginas somente Admin
+          if (isAdmin) _buildItem(context, 2, Icons.person_add, 'Cadastrar Cliente', true),
+          if (isAdmin) _buildItem(context, 3, Icons.room_service, 'Cadastrar Serviço', true),
+          if (isAdmin) _buildItem(context, 4, Icons.badge, 'Equipe', true),
 
-              // Financeiro somente admin
-              if (isAdmin) _buildItem(context, 6, Icons.account_balance_wallet, 'Financeiro', true),
-              if (isAdmin) _buildItem(context, 7, Icons.dashboard_outlined, 'Dashboard', true),
-              if (isAdmin) _buildItem(context, 8, Icons.bar_chart_rounded, 'Produção', true),
+          _buildItem(context, 5, Icons.inventory_2, 'Produtos', true),
 
-              _buildItem(context, 9, Icons.chat_bubble_outline_rounded, 'Mensagens WhatsApp', true),
-              _buildItem(context, 10, Icons.shopping_basket_outlined, 'Vender Produto', true),
-              _buildItem(context, 11, Icons.people_rounded, 'Gerenciar Clientes', true),
+          // Financeiro somente admin
+          if (isAdmin) _buildItem(context, 6, Icons.account_balance_wallet, 'Financeiro', true),
+          if (isAdmin) _buildItem(context, 7, Icons.dashboard_outlined, 'Dashboard', true),
+          if (isAdmin) _buildItem(context, 8, Icons.bar_chart_rounded, 'Produção', true),
 
-              const Divider(height: 40, indent: 20, endIndent: 20),
-              ListTile(
-                leading: const Icon(Icons.logout, color: Colors.redAccent),
-                title: const Text('Sair', style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold)),
-                onTap: () async {
-                  // O StreamBuilder do main.dart vai ouvir o fechamento da sessão e jogar para o Login automaticamente
-                  Navigator.of(context).pop(); // fecha o drawer primeiro
-                  await FirebaseAuth.instance.signOut();
-                },
-              ),
-              const SizedBox(height: 20),
-            ],
-          );
-        },
+          _buildItem(context, 9, Icons.chat_bubble_outline_rounded, 'Mensagens WhatsApp', true),
+          _buildItem(context, 10, Icons.shopping_basket_outlined, 'Vender Produto', true),
+          _buildItem(context, 11, Icons.people_rounded, 'Gerenciar Clientes', true),
+
+          const Divider(height: 40, indent: 20, endIndent: 20),
+          ListTile(
+            leading: const Icon(Icons.logout, color: Colors.redAccent),
+            title: const Text('Sair', style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold)),
+            onTap: () async {
+              Navigator.of(context).pop(); // fecha o drawer primeiro
+              await FirebaseAuth.instance.signOut();
+            },
+          ),
+          const SizedBox(height: 20),
+        ],
       ),
     );
   }
