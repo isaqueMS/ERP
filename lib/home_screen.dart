@@ -179,6 +179,8 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   }
 
   Widget _buildQuickActions() {
+    final isAdmin = widget.userRole.toLowerCase() == 'administrador' || widget.userRole.toLowerCase() == 'admin';
+
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 16),
       decoration: BoxDecoration(color: _quartzLight, borderRadius: BorderRadius.circular(24)),
@@ -186,10 +188,9 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
         mainAxisAlignment: MainAxisAlignment.spaceEvenly,
         children: [
           _quickAction(Icons.calendar_today_rounded, 'Agendar', _roseGold, () => widget.onNavigation?.call(1)),
-          _quickAction(Icons.person_add_rounded, 'Cliente', _roseGold, () => widget.onNavigation?.call(2)),
-          _quickAction(Icons.shopping_basket_rounded, 'Vender', const Color(0xFFC8A2C8), () => widget.onNavigation?.call(10)), // Novo Botão
-          _quickAction(Icons.payments_rounded, 'Caixa', _roseGold, () => widget.onNavigation?.call(6)),
-          _quickAction(Icons.chat_bubble_rounded, 'WhatsApp', _roseGold, () => widget.onNavigation?.call(9)),
+          if (isAdmin) _quickAction(Icons.people_rounded, 'Clientes', _roseGold, () => widget.onNavigation?.call(11)),
+          _quickAction(Icons.shopping_basket_rounded, 'Vender', const Color(0xFFC8A2C8), () => widget.onNavigation?.call(10)),
+          if (isAdmin) _quickAction(Icons.chat_bubble_rounded, 'WhatsApp', _roseGold, () => widget.onNavigation?.call(9)),
         ],
       ),
     );

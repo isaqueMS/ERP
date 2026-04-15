@@ -31,7 +31,7 @@ class WhatsAppService {
       "type": "template",
       "template": {
         "name": templateName,
-        "language": {"code": "en"},
+        "language": {"code": "pt_BR"},
         "components": [
           if (headerImageUrl != null)
             {

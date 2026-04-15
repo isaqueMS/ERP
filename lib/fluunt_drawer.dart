@@ -32,10 +32,8 @@ class FluuntDrawer extends StatelessWidget {
   static const Set<int> _agentPages = {
     0,  // Início
     1,  // Nova Reserva
-    5,  // Produtos (visualizar)
-    9,  // Mensagens WhatsApp
+    2,  // Cadastrar Cliente (Novo: Agente agora pode criar clientes)
     10, // Vender Produto
-    11, // Gerenciar Clientes
   };
 
   static bool isAllowed(String role, int index) {
@@ -95,22 +93,21 @@ class FluuntDrawer extends StatelessWidget {
           // Páginas de todos (agente + admin)
           _buildItem(context, 0, Icons.home_rounded, 'Início', true),
           _buildItem(context, 1, Icons.calendar_today, 'Nova Reserva', true),
+          if (isAdmin) _buildItem(context, 11, Icons.people_rounded, 'Gerenciar Clientes', true),
+          if (isAdmin) _buildItem(context, 9, Icons.chat_bubble_outline_rounded, 'Mensagens WhatsApp', true),
+          _buildItem(context, 10, Icons.shopping_basket_outlined, 'Vender Produto', true),
 
-          // Páginas somente Admin
+          // Páginas Somente Admin ou Agente com permissão
           if (isAdmin) _buildItem(context, 2, Icons.person_add, 'Cadastrar Cliente', true),
           if (isAdmin) _buildItem(context, 3, Icons.room_service, 'Cadastrar Serviço', true),
           if (isAdmin) _buildItem(context, 4, Icons.badge, 'Equipe', true),
 
-          _buildItem(context, 5, Icons.inventory_2, 'Produtos', true),
+          if (isAdmin) _buildItem(context, 5, Icons.inventory_2, 'Produtos', true),
 
           // Financeiro somente admin
           if (isAdmin) _buildItem(context, 6, Icons.account_balance_wallet, 'Financeiro', true),
           if (isAdmin) _buildItem(context, 7, Icons.dashboard_outlined, 'Dashboard', true),
           if (isAdmin) _buildItem(context, 8, Icons.bar_chart_rounded, 'Produção', true),
-
-          _buildItem(context, 9, Icons.chat_bubble_outline_rounded, 'Mensagens WhatsApp', true),
-          _buildItem(context, 10, Icons.shopping_basket_outlined, 'Vender Produto', true),
-          _buildItem(context, 11, Icons.people_rounded, 'Gerenciar Clientes', true),
 
           const Divider(height: 40, indent: 20, endIndent: 20),
           ListTile(
