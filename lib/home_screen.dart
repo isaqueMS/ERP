@@ -68,6 +68,8 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
         setState(() {
           _agentStaffId = snap.docs.first.id;
         });
+      } else {
+        debugPrint("AVISO: E-mail ${user.email} não localizado na coleção 'staff'. Filtros podem ocultar dados.");
       }
     } catch (e) {
       debugPrint("Erro ao carregar ID do agente na Home: $e");
@@ -261,8 +263,16 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                 
                   if (date != null && date.isAfter(range.start) && date.isBefore(range.end)) {
                     // Filtro de Segurança por Cargo
-                    if (widget.userRole == 'agente' && data['professionalId'] != _agentStaffId) {
-                      continue;
+                    // Se for agente, mostramos os lançamentos vinculados a ele OU criados por ele.
+                    final creatorId = data['creatorId'] ?? "";
+                    final professionalId = data['professionalId'] ?? "";
+                    final user = FirebaseAuth.instance.currentUser;
+
+                    if (widget.userRole == 'agente') {
+                      bool isMine = (professionalId == _agentStaffId || creatorId == user?.uid);
+                      if (!isMine && _agentStaffId != null) {
+                        continue;
+                      }
                     }
 
                     final rawAmount = data['amount'];

@@ -144,8 +144,13 @@ class _TransactionRegistrationScreenState extends State<TransactionRegistrationS
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Erro ao salvar: $e')),
+        showDialog(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: const Text('Erro de Conexão'),
+            content: Text('Não foi possível gravar no banco de dados. Verifique sua internet ou permissões.\n\nDetalhe: $e'),
+            actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('OK'))],
+          ),
         );
       }
     } finally {
