@@ -326,14 +326,27 @@ class _ReservationWizardState extends State<ReservationWizard> {
       setState(() => _isSaving = true);
 
       try {
-        await FirebaseFirestore.instance.collection('reservas').add({
+        final clientItem = _dbClients.firstWhere((c) => c['name'] == _selectedClient, orElse: () => {});
+        final staffItem = _dbStaff.firstWhere((s) => s['name'] == _selectedProfessional, orElse: () => {});
+        final clientId = clientItem['id'] ?? '';
+        final staffId = staffItem['id'] ?? '';
+        final user = FirebaseAuth.instance.currentUser;
+
+        await FirebaseFirestore.instance.collection('appointments').add({
           'cliente': _selectedClient,
+          'clientId': clientId,
           'profissional': _selectedProfessional,
+          'professionalId': staffId,
+          'staffId': staffId, // Adicionando também staffId para compatibilidade com outros lugares
           'servico': _selectedService,
+          'service': _selectedService,
           'data': _selectedDate.toIso8601String(),
           'status': _status,
           'valor': _price,
+          'price': _price,
           'observacoes': _notesController.text,
+          'creatorId': user?.uid ?? '',
+          'creatorName': user?.email?.split('@')[0] ?? 'Admin',
           'dataCriacao': FieldValue.serverTimestamp(),
         });
 

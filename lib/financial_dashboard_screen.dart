@@ -270,9 +270,13 @@ class _FinancialDashboardScreenState extends State<FinancialDashboardScreen> {
           padding: const EdgeInsets.all(24),
           children: [
             _buildSummary(totalIncome, totalExpense),
+            if (widget.userRole.toLowerCase() == 'agente') ...[
+              const SizedBox(height: 32),
+              _buildAppointmentsSection(),
+            ],
             const SizedBox(height: 32),
             const Text(
-              'TRANSAÇÕES NO PERÍODO',
+              'HISTÓRICO DE LANÇAMENTOS',
               style: TextStyle(fontSize: 10, fontWeight: FontWeight.w900, color: Colors.grey, letterSpacing: 1),
             ),
             const SizedBox(height: 16),
@@ -305,20 +309,25 @@ class _FinancialDashboardScreenState extends State<FinancialDashboardScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text('SALDO NO PERÍODO', style: TextStyle(color: Colors.white70, fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 1)),
+              Text(
+                widget.userRole.toLowerCase() == 'agente' ? 'MINHA PRODUÇÃO TOTAL' : 'SALDO NO PERÍODO', 
+                style: const TextStyle(color: Colors.white70, fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 1)
+              ),
               const SizedBox(height: 8),
               Text(
-                _currencyFormat.format(balance),
+                widget.userRole.toLowerCase() == 'agente' ? _currencyFormat.format(income) : _currencyFormat.format(balance),
                 style: const TextStyle(color: Colors.white, fontSize: 32, fontWeight: FontWeight.w900),
               ),
-              const SizedBox(height: 24),
-              Row(
-                children: [
-                  _summaryMiniCard('ENTRADAS', income, Colors.greenAccent),
-                  const SizedBox(width: 16),
-                  _summaryMiniCard('SAÍDAS', expense, Colors.redAccent),
-                ],
-              ),
+              if (widget.userRole.toLowerCase() != 'agente') ...[
+                const SizedBox(height: 24),
+                Row(
+                  children: [
+                    _summaryMiniCard('ENTRADAS', income, Colors.greenAccent),
+                    const SizedBox(width: 16),
+                    _summaryMiniCard('SAÍDAS', expense, Colors.redAccent),
+                  ],
+                ),
+              ],
             ],
           ),
         ),
@@ -499,6 +508,82 @@ class _FinancialDashboardScreenState extends State<FinancialDashboardScreen> {
           ],
         ),
       ),
+    );
+  }
+
+  Widget _buildAppointmentsSection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'MEUS AGENDAMENTOS NO PERÍODO',
+          style: TextStyle(fontSize: 10, fontWeight: FontWeight.w900, color: Colors.grey, letterSpacing: 1),
+        ),
+        const SizedBox(height: 16),
+        StreamBuilder<QuerySnapshot>(
+          stream: FirebaseFirestore.instance.collection('appointments').snapshots(),
+          builder: (context, snapshot) {
+            if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
+            
+            final docs = snapshot.data!.docs.where((doc) {
+              final data = doc.data() as Map<String, dynamic>;
+              final dateStr = data['date'] as String? ?? "";
+              final date = DateTime.tryParse(dateStr);
+              if (date == null || _selectedDateRange == null) return false;
+
+              bool matchDate = date.isAfter(_selectedDateRange!.start.subtract(const Duration(days: 1))) && 
+                             date.isBefore(_selectedDateRange!.end.add(const Duration(days: 1)));
+
+              bool matchProf = true;
+              if (widget.userRole.toLowerCase() == 'agente') {
+                matchProf = (data['professionalId'] ?? data['staffId']) == _agentStaffId ||
+                            data['creatorId'] == FirebaseAuth.instance.currentUser?.uid;
+              }
+
+              return matchDate && matchProf;
+            }).toList();
+
+            if (docs.isEmpty) return const Text('Nenhum agendamento encontrado.', style: TextStyle(color: Colors.grey, fontSize: 12));
+
+            return SizedBox(
+              height: 140,
+              child: ListView.separated(
+                scrollDirection: Axis.horizontal,
+                physics: const BouncingScrollPhysics(),
+                itemCount: docs.length,
+                separatorBuilder: (_, __) => const SizedBox(width: 12),
+                itemBuilder: (context, index) {
+                  final item = docs[index].data() as Map<String, dynamic>;
+                  final price = (item['price'] is num) ? (item['price'] as num).toDouble() : (item['valor'] is num ? (item['valor'] as num).toDouble() : 0.0);
+                  final dt = DateTime.tryParse(item['date'] ?? "");
+                  
+                  return Container(
+                    width: 200, padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20), border: Border.all(color: Colors.grey.withOpacity(0.1))),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                             Text(item['status']?.toUpperCase() ?? 'PENDENTE', style: const TextStyle(color: Color(0xFFFFB6C1), fontSize: 8, fontWeight: FontWeight.w900)),
+                             Text(_currencyFormat.format(price), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                          ],
+                        ),
+                        const Spacer(),
+                        Text(item['cliente'] ?? item['clientName'] ?? 'Cliente', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14), maxLines: 1, overflow: TextOverflow.ellipsis),
+                        Text(item['servico'] ?? item['service'] ?? 'Serviço', style: const TextStyle(color: Colors.grey, fontSize: 11), maxLines: 1),
+                        const SizedBox(height: 8),
+                        Text(dt != null ? DateFormat('dd/MM - HH:mm').format(dt) : '', style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold)),
+                      ],
+                    ),
+                  );
+                },
+              ),
+            );
+          },
+        ),
+      ],
     );
   }
 }

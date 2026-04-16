@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:intl/intl.dart';
+import 'package:rxdart/rxdart.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'fluunt_drawer.dart';
 
@@ -39,7 +40,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     
     final now = DateTime.now();
     _selectedRange = DateTimeRange(
-      start: DateTime(now.year, now.month, now.day).subtract(const Duration(days: 7)),
+      start: DateTime(now.year, now.month, now.day).subtract(const Duration(days: 30)),
       end: DateTime(now.year, now.month, now.day, 23, 59, 59),
     );
 
@@ -166,7 +167,11 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                     children: [
                       _buildQuickActions(),
                       const SizedBox(height: 32),
-                      _buildFinancialSummary(), // Nova seção que soma tudo
+                      if (widget.userRole.toLowerCase() != 'agente') ...[
+                        _buildFinancialSummary(),
+                        const SizedBox(height: 32),
+                      ],
+                      _buildAppointmentsList(),
                       const SizedBox(height: 32),
                       _buildServicesShowcase(),
                     ],
@@ -237,9 +242,13 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
         ),
         const SizedBox(height: 8),
         
-        // Vamos usar o StreamBuilder de Transactions para a contabilidade real
-        StreamBuilder<QuerySnapshot>(
-          stream: FirebaseFirestore.instance.collection('transactions').snapshots(),
+        // Multi-Stream Builder (Transactions + Appointments) unificado
+        StreamBuilder<List<QuerySnapshot>>(
+          stream: Rx.combineLatest2(
+            FirebaseFirestore.instance.collection('transactions').snapshots(),
+            FirebaseFirestore.instance.collection('appointments').snapshots(),
+            (a, b) => [a, b],
+          ),
           builder: (context, snapshot) {
             if (widget.userRole == 'agente' && _isLoadingAgentId) {
               return const Center(child: Padding(padding: EdgeInsets.all(20), child: CircularProgressIndicator(color: Colors.white24)));
@@ -249,7 +258,12 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
             double totalExpense = 0;
 
             if (snapshot.hasData) {
-              for (var doc in snapshot.data!.docs) {
+              final transactions = snapshot.data![0].docs;
+              final appointments = snapshot.data![1].docs;
+              final user = FirebaseAuth.instance.currentUser;
+
+              // 1. Processa Transactions (Caixa manual)
+              for (var doc in transactions) {
                 final data = doc.data() as Map<String, dynamic>;
                 
                 DateTime? date;
@@ -270,7 +284,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
 
                     if (widget.userRole == 'agente') {
                       bool isMine = (professionalId == _agentStaffId || creatorId == user?.uid);
-                      if (!isMine && _agentStaffId != null) {
+                      if (!isMine) {
                         continue;
                       }
                     }
@@ -286,6 +300,8 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                     }
                   }
               }
+
+              // Removido o loop duplicado de appointments
             }
 
             return Container(
@@ -329,6 +345,107 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
         const SizedBox(height: 4),
         Text(label, style: TextStyle(color: Colors.white.withOpacity(0.4), fontSize: 9, fontWeight: FontWeight.w600, letterSpacing: 0.5)),
       ],
+    );
+  }
+
+  Widget _buildAppointmentsList() {
+    final range = _selectedRange!;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _sectionTitle('MEUS AGENDAMENTOS', Icons.event_note_rounded),
+        const SizedBox(height: 16),
+        StreamBuilder<QuerySnapshot>(
+          stream: FirebaseFirestore.instance.collection('appointments').snapshots(),
+          builder: (context, snapshot) {
+            if (!snapshot.hasData) return const SizedBox(height: 100, child: Center(child: CircularProgressIndicator(color: _roseGold)));
+            
+            final docs = snapshot.data!.docs.where((doc) {
+              final data = doc.data() as Map<String, dynamic>;
+              DateTime? date;
+              final rawDate = data['date'];
+              if (rawDate is Timestamp) date = rawDate.toDate();
+              else if (rawDate is String) date = DateTime.tryParse(rawDate);
+
+              if (date == null || !date.isAfter(range.start) || !date.isBefore(range.end)) return false;
+
+              if (widget.userRole == 'agente') {
+                final creatorId = data['creatorId'] ?? "";
+                final professionalId = (data['professionalId'] ?? data['staffId'] ?? "").toString();
+                return (professionalId == _agentStaffId || creatorId == FirebaseAuth.instance.currentUser?.uid);
+              }
+              return true;
+            }).toList();
+
+            // Ordenar por data (mais próximos primeiro)
+            docs.sort((a, b) {
+              final da = DateTime.tryParse((a.data() as Map)['date'] ?? "") ?? DateTime(0);
+              final db = DateTime.tryParse((b.data() as Map)['date'] ?? "") ?? DateTime(0);
+              return da.compareTo(db);
+            });
+
+            if (docs.isEmpty) {
+              return Container(
+                width: double.infinity, padding: const EdgeInsets.all(24),
+                decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20), border: Border.all(color: _quartz)),
+                child: const Text('Nenhum agendamento para este período.', style: TextStyle(color: Colors.grey, fontSize: 12)),
+              );
+            }
+
+            return SizedBox(
+              height: 150,
+              child: ListView.separated(
+                scrollDirection: Axis.horizontal,
+                physics: const BouncingScrollPhysics(),
+                itemCount: docs.length,
+                separatorBuilder: (_, __) => const SizedBox(width: 12),
+                itemBuilder: (ctx, i) {
+                  final data = docs[i].data() as Map<String, dynamic>;
+                  return _appointmentCard(data);
+                },
+              ),
+            );
+          },
+        ),
+      ],
+    );
+  }
+
+  Widget _appointmentCard(Map<String, dynamic> data) {
+    DateTime? date = DateTime.tryParse(data['date'] ?? "");
+    final price = (data['price'] is num) ? (data['price'] as num).toDouble() : (data['valor'] is num ? (data['valor'] as num).toDouble() : 0.0);
+    
+    return Container(
+      width: 220, padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white, borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: _quartz),
+        boxShadow: [BoxShadow(color: _roseGold.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 4))],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(data['status']?.toUpperCase() ?? 'PENDENTE', style: TextStyle(color: _roseGold, fontSize: 8, fontWeight: FontWeight.w900, letterSpacing: 1)),
+              Text(_currency.format(price), style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 12)),
+            ],
+          ),
+          const Spacer(),
+          Text(data['cliente'] ?? data['clientName'] ?? 'Cliente oculto', style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 14), maxLines: 1, overflow: TextOverflow.ellipsis),
+          const SizedBox(height: 4),
+          Text(data['servico'] ?? data['service'] ?? 'Serviço', style: const TextStyle(color: Colors.grey, fontSize: 12), maxLines: 1, overflow: TextOverflow.ellipsis),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              const Icon(Icons.access_time_rounded, size: 14, color: _roseGold),
+              const SizedBox(width: 6),
+              Text(date != null ? DateFormat('dd/MM - HH:mm').format(date) : '--/-- --:--', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11)),
+            ],
+          ),
+        ],
+      ),
     );
   }
 
