@@ -333,21 +333,18 @@ class _ReservationWizardState extends State<ReservationWizard> {
         final user = FirebaseAuth.instance.currentUser;
 
         await FirebaseFirestore.instance.collection('appointments').add({
-          'cliente': _selectedClient,
           'clientId': clientId,
-          'profissional': _selectedProfessional,
+          'clientName': _selectedClient,
           'professionalId': staffId,
-          'staffId': staffId, // Adicionando também staffId para compatibilidade com outros lugares
-          'servico': _selectedService,
+          'professionalName': _selectedProfessional,
           'service': _selectedService,
-          'data': _selectedDate.toIso8601String(),
+          'date': _selectedDate.toIso8601String(), 
           'status': _status,
-          'valor': _price,
           'price': _price,
-          'observacoes': _notesController.text,
+          'notes': _notesController.text,
           'creatorId': user?.uid ?? '',
           'creatorName': user?.email?.split('@')[0] ?? 'Admin',
-          'dataCriacao': FieldValue.serverTimestamp(),
+          'createdAt': FieldValue.serverTimestamp(),
         });
 
         setState(() => _isSaving = false);

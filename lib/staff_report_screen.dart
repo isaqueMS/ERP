@@ -86,35 +86,55 @@ class _StaffReportScreenState extends State<StaffReportScreen> {
     if (_selectedStaffDocId == null) return;
     setState(() => _isLoadingReport = true);
 
-    // Buscar transações do profissional no período selecionado
-    final snap = await FirebaseFirestore.instance
-        .collection('transactions')
-        .where('professionalId', isEqualTo: _selectedStaffDocId)
-        .get();
-
     final startDate = _selectedDateRange.start;
     final endDate = _selectedDateRange.end;
 
-    final filtered = snap.docs.where((doc) {
-      final data = doc.data();
-      final dateStr = data['date'] as String? ?? '';
-      if (dateStr.isEmpty) return false;
-      try {
-        final date = DateTime.parse(dateStr);
-        return !date.isBefore(startDate) && !date.isAfter(endDate);
-      } catch (_) {
-        return false;
-      }
-    }).toList();
+    // Buscar transações (receitas) do profissional
+    final txSnap = await FirebaseFirestore.instance
+        .collection('transactions')
+        .where('professionalId', isEqualTo: _selectedStaffDocId)
+        .where('type', isEqualTo: 'income')
+        .get();
+
+    // Buscar agendamentos (concluídos) do profissional
+    final appSnap = await FirebaseFirestore.instance
+        .collection('appointments')
+        .where('professionalId', isEqualTo: _selectedStaffDocId)
+        .get();
 
     double gross = 0;
     int count = 0;
-    for (final doc in filtered) {
+
+    // Processar transações
+    for (final doc in txSnap.docs) {
       final data = doc.data();
-      if (data['type'] == 'income') {
-        gross += (data['amount'] as num).toDouble();
-        count++;
-      }
+      final dateStr = (data['date'] ?? data['data']) as String? ?? '';
+      if (dateStr.isEmpty) continue;
+      try {
+        final date = DateTime.parse(dateStr);
+        if (!date.isBefore(startDate) && !date.isAfter(endDate.add(const Duration(days: 1)))) {
+          gross += (data['amount'] as num).toDouble();
+          count++;
+        }
+      } catch (_) {}
+    }
+
+    // Processar agendamentos (apenas concluídos contam para produção real)
+    for (final doc in appSnap.docs) {
+      final data = doc.data();
+      final status = data['status']?.toString().toLowerCase() ?? '';
+      if (status != 'completed' && status != 'concluído') continue; // Só soma os concluídos
+      
+      final dateStr = (data['date'] ?? data['data']) as String? ?? '';
+      if (dateStr.isEmpty) continue;
+      try {
+        final date = DateTime.parse(dateStr);
+        if (!date.isBefore(startDate) && !date.isAfter(endDate.add(const Duration(days: 1)))) {
+          final price = (data['price'] is num) ? (data['price'] as num).toDouble() : (data['valor'] is num ? (data['valor'] as num).toDouble() : 0.0);
+          gross += price;
+          count++;
+        }
+      } catch (_) {}
     }
 
     // Comissão = faturamento bruto * percentual / 100

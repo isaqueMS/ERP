@@ -527,7 +527,7 @@ class _FinancialDashboardScreenState extends State<FinancialDashboardScreen> {
             
             final docs = snapshot.data!.docs.where((doc) {
               final data = doc.data() as Map<String, dynamic>;
-              final dateStr = data['date'] as String? ?? "";
+              final dateStr = (data['date'] ?? data['data']) as String? ?? "";
               final date = DateTime.tryParse(dateStr);
               if (date == null || _selectedDateRange == null) return false;
 

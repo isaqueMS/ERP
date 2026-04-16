@@ -124,7 +124,7 @@ class _TransactionRegistrationScreenState extends State<TransactionRegistrationS
         'amount': double.tryParse(_amountController.text) ?? 0.0,
         'type': _transactionType,
         'category': _selectedCategory,
-        'date': '${_selectedDate.year}-${_selectedDate.month.toString().padLeft(2, '0')}-${_selectedDate.day.toString().padLeft(2, '0')}',
+        'date': _selectedDate.toIso8601String(),
         'description': _descriptionController.text.trim(),
         'professionalId': _selectedProfessionalId ?? "",
         'professionalName': _selectedProfessionalName ?? "",

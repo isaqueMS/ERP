@@ -363,7 +363,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
             final docs = snapshot.data!.docs.where((doc) {
               final data = doc.data() as Map<String, dynamic>;
               DateTime? date;
-              final rawDate = data['date'];
+              final rawDate = data['date'] ?? data['data']; 
               if (rawDate is Timestamp) date = rawDate.toDate();
               else if (rawDate is String) date = DateTime.tryParse(rawDate);
 
