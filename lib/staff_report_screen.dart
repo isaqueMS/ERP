@@ -119,11 +119,13 @@ class _StaffReportScreenState extends State<StaffReportScreen> {
       } catch (_) {}
     }
 
-    // Processar agendamentos (apenas concluídos contam para produção real)
+    // Processar agendamentos
     for (final doc in appSnap.docs) {
       final data = doc.data();
-      final status = data['status']?.toString().toLowerCase() ?? '';
-      if (status != 'completed' && status != 'concluído') continue; // Só soma os concluídos
+      final status = (data['status'] ?? '').toString().toLowerCase();
+      
+      // Ignora apenas os cancelados, para que 'Agendado' e 'Pendente' apareçam na produção.
+      if (status == 'cancelado' || status == 'canceled' || status == 'cancelled') continue;
       
       final dateStr = (data['date'] ?? data['data']) as String? ?? '';
       if (dateStr.isEmpty) continue;
