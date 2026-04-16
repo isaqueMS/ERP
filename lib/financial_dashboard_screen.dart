@@ -543,6 +543,13 @@ class _FinancialDashboardScreenState extends State<FinancialDashboardScreen> {
               return matchDate && matchProf;
             }).toList();
 
+            // Ordenar por data (mais novos primeiro)
+            docs.sort((a, b) {
+              final da = DateTime.tryParse((a.data() as Map)['date'] ?? "") ?? DateTime(0);
+              final db = DateTime.tryParse((b.data() as Map)['date'] ?? "") ?? DateTime(0);
+              return db.compareTo(da);
+            });
+
             if (docs.isEmpty) return const Text('Nenhum agendamento encontrado.', style: TextStyle(color: Colors.grey, fontSize: 12));
 
             return SizedBox(
@@ -571,7 +578,12 @@ class _FinancialDashboardScreenState extends State<FinancialDashboardScreen> {
                           ],
                         ),
                         const Spacer(),
-                        Text(item['cliente'] ?? item['clientName'] ?? 'Cliente', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14), maxLines: 1, overflow: TextOverflow.ellipsis),
+                        FutureBuilder<String>(
+                          future: _getClientName(item),
+                          builder: (context, snapshot) {
+                            return Text(snapshot.data ?? 'Carregando...', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14), maxLines: 1, overflow: TextOverflow.ellipsis);
+                          }
+                        ),
                         Text(item['servico'] ?? item['service'] ?? 'Serviço', style: const TextStyle(color: Colors.grey, fontSize: 11), maxLines: 1),
                         const SizedBox(height: 8),
                         Text(dt != null ? DateFormat('dd/MM - HH:mm').format(dt) : '', style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold)),
@@ -585,5 +597,23 @@ class _FinancialDashboardScreenState extends State<FinancialDashboardScreen> {
         ),
       ],
     );
+  }
+
+  Future<String> _getClientName(Map<String, dynamic> data) async {
+    if (data['cliente'] != null && data['cliente'].toString().isNotEmpty) {
+      return data['cliente'];
+    } else if (data['clientName'] != null && data['clientName'].toString().isNotEmpty) {
+      return data['clientName'];
+    } else if (data['clientId'] != null && data['clientId'].toString().isNotEmpty) {
+      try {
+        final doc = await FirebaseFirestore.instance.collection('clients').doc(data['clientId']).get();
+        if (doc.exists) {
+          return doc.data()?['name'] ?? 'Cliente';
+        }
+      } catch (e) {
+        return 'Cliente';
+      }
+    }
+    return 'Cliente oculto';
   }
 }
