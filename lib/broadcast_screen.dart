@@ -15,7 +15,7 @@ class BroadcastScreen extends StatefulWidget {
 
 class _BroadcastScreenState extends State<BroadcastScreen> {
   final TextEditingController _messageController = TextEditingController(
-    text: 'Olá, [NOME]! 🌸 Temos uma novidade especial para você aqui no Estúdio Alê...'
+    text: 'Hello, [NOME]! 🌸 news from (studio) Estúdio Alê...'
   );
   final TextEditingController _templateController = TextEditingController(text: 'hello_world'); 
   final TextEditingController _searchController = TextEditingController();
@@ -71,7 +71,7 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
 
     for (var phone in _selectedClients) {
       final client = _clientsData.firstWhere((c) => c['phone'] == phone, orElse: () => {'name': 'Cliente'});
-      setState(() => _lastLogs += 'Enviando para ${client['name']}...\n');
+      setState(() => _lastLogs += 'Enviando para ${client['name']} ($phone)...\n');
       
       WhatsAppServiceResponse result;
       
@@ -79,7 +79,7 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
         result = await WhatsAppService.sendTemplateMessage(
           to: phone,
           templateName: 'studio',
-          headerImageUrl: 'https://scontent.whatsapp.net/v/t61.29466-34/534425705_1671523183866510_9020856625431338405_n.png?ccb=1-7&_nc_sid=8b1bef&_nc_eui2=AeEtdne-nLZjg2wVj1ygC21kjnINhIvEhFKOcg2Ei8SEUs9OkMIbic4JV8XVmtG5B-25OjdQ5AOgJHiQ7tM8BPRV&_nc_ohc=6ia0BSMfGG8Q7kNvwEI27YT&_nc_oc=AdqOH2qGQLs5z-OBXytJ-N95kXQfjMi88W9hMeArJKqN6iaiNVtZs9-9F34BIVf1-6c&_nc_zt=3&_nc_ht=scontent.whatsapp.net&_nc_gid=f4az17T2h7V0osOAJrxUqg&_nc_ss=7a3a8&oh=01_Q5Aa4QEvjMNHvNbuDLTEKWK1JcpSteIkU-MrBEL6QpC3eUcTYA&oe=6A05F7BF',
+          headerImageUrl: 'https://images.unsplash.com/photo-1633613286991-611fe299c4be?q=80&w=500&auto=format&fit=crop', // Imagem temporária (Logo Estética)
         );
       } else {
         result = await WhatsAppService.sendTextMessage(
@@ -89,7 +89,7 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
       }
       
       setState(() {
-        _lastLogs += result.success ? "   ✅ Sucesso!\n" : "   ❌ Falha: ${result.message}\n";
+        _lastLogs += result.success ? "   ✅ ${result.message}\n" : "   ❌ Falha: ${result.message}\n";
       });
 
       if (result.success) successCount++;
@@ -239,7 +239,7 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
               children: [
                 _tagChip('[NOME]', () => _insertTag('[NOME]')),
                 _tagChip('[DATA]', () => _insertTag('[DATA]')),
-                _tagChip('📍 Estúdio Alê', () => _insertTag('Estúdio Alê')),
+                _tagChip('📍 (studio) Estúdio Alê', () => _insertTag('(studio) Estúdio Alê')),
               ],
             ),
           ),

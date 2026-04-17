@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:intl/intl.dart';
+import 'package:rxdart/rxdart.dart';
 import 'fluunt_drawer.dart';
 
 class FinancialDashboardScreen extends StatefulWidget {
@@ -206,63 +207,67 @@ class _FinancialDashboardScreenState extends State<FinancialDashboardScreen> {
   }
 
   Widget _buildDashboardContent() {
-    if (widget.userRole == 'agente' && _isLoadingAgentId) {
-      return const Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            CircularProgressIndicator(),
-            SizedBox(height: 16),
-            Text('Carregando seu perfil...', style: TextStyle(color: Colors.grey)),
-          ],
-        ),
-      );
-    }
-
-    return StreamBuilder<QuerySnapshot>(
-      stream: FirebaseFirestore.instance.collection('transactions').snapshots(),
+    return StreamBuilder<List<QuerySnapshot>>(
+      stream: Rx.combineLatest2(
+        FirebaseFirestore.instance.collection('transactions').snapshots(),
+        FirebaseFirestore.instance.collection('appointments').snapshots(),
+        (a, b) => [a, b],
+      ),
       builder: (context, snapshot) {
         if (snapshot.hasError) return const Center(child: Text('Erro ao carregar dados'));
         if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator());
 
-        final docs = snapshot.data!.docs;
+        final transactions = snapshot.data![0].docs;
+        final appointments = snapshot.data![1].docs;
+        final isAgente = widget.userRole.toLowerCase() == 'agente';
         
-        // Manual filtering (since date is stored as string YYYY-MM-DD)
-        final filteredDocs = docs.where((doc) {
+        // 1. Filtrar Transactions
+        final filteredTx = transactions.where((doc) {
           final data = doc.data() as Map<String, dynamic>;
-          final dateStr = data['date'] as String;
-          final date = DateTime.parse(dateStr);
+          final dateStr = (data['date'] ?? data['data']) as String? ?? "";
+          if (dateStr.isEmpty) return false;
+          final date = DateTime.tryParse(dateStr);
+          if (date == null) return false;
           
-          bool matchDate = true;
-          if (_selectedDateRange != null) {
-            matchDate = date.isAfter(_selectedDateRange!.start.subtract(const Duration(days: 1))) && 
-                        date.isBefore(_selectedDateRange!.end.add(const Duration(days: 1)));
-          }
-
-          bool matchProf = true;
-          if (widget.userRole == 'agente') {
-            // Se for agente, OBRIGATÓRIO bater com o ID do agente carragado
-            matchProf = data['professionalId'] == _agentStaffId;
-          } else {
-            // Se for admin, segue o filtro selecionado (ou todos se null)
-            matchProf = _selectedProfessionalId == null || data['professionalId'] == _selectedProfessionalId;
-          }
-
+          bool matchDate = _selectedDateRange == null || (date.isAfter(_selectedDateRange!.start.subtract(const Duration(days: 1))) && date.isBefore(_selectedDateRange!.end.add(const Duration(days: 1))));
+          bool matchProf = isAgente ? (data['professionalId'] == _agentStaffId || data['creatorId'] == FirebaseAuth.instance.currentUser?.uid) : (_selectedProfessionalId == null || data['professionalId'] == _selectedProfessionalId);
           bool matchClient = _selectedClientId == null || data['clientId'] == _selectedClientId;
 
           return matchDate && matchProf && matchClient;
         }).toList();
 
+        // 2. Filtrar Appointments
+        final filteredApp = appointments.where((doc) {
+          final data = doc.data() as Map<String, dynamic>;
+          final dateStr = (data['date'] ?? data['data']) as String? ?? "";
+          if (dateStr.isEmpty) return false;
+          final date = DateTime.tryParse(dateStr);
+          if (date == null) return false;
+
+          bool matchDate = _selectedDateRange == null || (date.isAfter(_selectedDateRange!.start.subtract(const Duration(days: 1))) && date.isBefore(_selectedDateRange!.end.add(const Duration(days: 1))));
+          bool matchProf = isAgente ? ((data['professionalId'] ?? data['staffId']) == _agentStaffId || data['creatorId'] == FirebaseAuth.instance.currentUser?.uid) : (_selectedProfessionalId == null || (data['professionalId'] ?? data['staffId']) == _selectedProfessionalId);
+          bool matchClient = _selectedClientId == null || data['clientId'] == _selectedClientId;
+
+          return matchDate && matchProf && matchClient;
+        }).toList();
+
+        // 3. Calcular Totais
         double totalIncome = 0;
         double totalExpense = 0;
 
-        for (var doc in filteredDocs) {
+        for (var doc in filteredTx) {
           final data = doc.data() as Map<String, dynamic>;
-          final amount = (data['amount'] as num).toDouble();
-          if (data['type'] == 'income') {
-            totalIncome += amount;
-          } else {
-            totalExpense += amount;
+          final amount = (data['amount'] as num?)?.toDouble() ?? 0.0;
+          if (data['type'] == 'income') totalIncome += amount;
+          else totalExpense += amount;
+        }
+
+        for (var doc in filteredApp) {
+          final data = doc.data() as Map<String, dynamic>;
+          final status = (data['status'] ?? '').toString().toLowerCase();
+          // Segue a mesma regra da tela de Produção: soma tudo, menos os cancelados.
+          if (status != 'cancelado' && status != 'canceled' && status != 'cancelled') {
+            totalIncome += (data['price'] is num) ? (data['price'] as num).toDouble() : (data['valor'] is num ? (data['valor'] as num).toDouble() : 0.0);
           }
         }
 
@@ -270,20 +275,22 @@ class _FinancialDashboardScreenState extends State<FinancialDashboardScreen> {
           padding: const EdgeInsets.all(24),
           children: [
             _buildSummary(totalIncome, totalExpense),
-            if (widget.userRole.toLowerCase() == 'agente') ...[
+            if (isAgente) ...[
               const SizedBox(height: 32),
-              _buildAppointmentsSection(),
+              _buildAppointmentsSectionForAdmin(filteredApp),
             ],
             const SizedBox(height: 32),
-            const Text(
-              'HISTÓRICO DE LANÇAMENTOS',
-              style: TextStyle(fontSize: 10, fontWeight: FontWeight.w900, color: Colors.grey, letterSpacing: 1),
-            ),
+            const Text('HISTÓRICO DE LANÇAMENTOS', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w900, color: Colors.grey, letterSpacing: 1)),
             const SizedBox(height: 16),
-            if (filteredDocs.isEmpty)
-              const Center(child: Padding(padding: EdgeInsets.only(top: 40), child: Text('Nenhuma transação encontrada', style: TextStyle(color: Colors.grey))))
+            if (filteredTx.isEmpty)
+              const Center(child: Padding(padding: EdgeInsets.only(top: 40), child: Text('Nenhum lançamento encontrado', style: TextStyle(color: Colors.grey))))
             else
-              ...filteredDocs.map((doc) => _buildTransactionCard(doc.data() as Map<String, dynamic>)).toList(),
+              ...filteredTx.map((doc) => _buildTransactionCard(doc.data() as Map<String, dynamic>)).toList(),
+            if (!isAgente) ...[
+              const SizedBox(height: 32),
+              _buildAppointmentsSectionForAdmin(filteredApp),
+            ],
+            const SizedBox(height: 40),
           ],
         );
       },
@@ -615,5 +622,61 @@ class _FinancialDashboardScreenState extends State<FinancialDashboardScreen> {
       }
     }
     return 'Cliente oculto';
+  }
+
+  Widget _buildAppointmentsSectionForAdmin(List<QueryDocumentSnapshot> docs) {
+    if (docs.isEmpty) return const SizedBox();
+    
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'AGENDAMENTOS RECENTES',
+          style: TextStyle(fontSize: 10, fontWeight: FontWeight.w900, color: Colors.grey, letterSpacing: 1),
+        ),
+        const SizedBox(height: 16),
+        SizedBox(
+          height: 140,
+          child: ListView.separated(
+            scrollDirection: Axis.horizontal,
+            physics: const BouncingScrollPhysics(),
+            itemCount: docs.length,
+            separatorBuilder: (_, __) => const SizedBox(width: 12),
+            itemBuilder: (context, index) {
+              final item = docs[index].data() as Map<String, dynamic>;
+              final price = (item['price'] is num) ? (item['price'] as num).toDouble() : (item['valor'] is num ? (item['valor'] as num).toDouble() : 0.0);
+              final dt = DateTime.tryParse((item['date'] ?? item['data']) ?? "");
+              
+              return Container(
+                width: 200, padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20), border: Border.all(color: Colors.grey.withOpacity(0.1))),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                         Text(item['status']?.toUpperCase() ?? 'PENDENTE', style: const TextStyle(color: Color(0xFFFFB6C1), fontSize: 8, fontWeight: FontWeight.w900)),
+                         Text(_currencyFormat.format(price), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                      ],
+                    ),
+                    const Spacer(),
+                    FutureBuilder<String>(
+                      future: _getClientName(item),
+                      builder: (context, snapshot) {
+                        return Text(snapshot.data ?? 'Carregando...', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14), maxLines: 1, overflow: TextOverflow.ellipsis);
+                      }
+                    ),
+                    Text(item['servico'] ?? item['service'] ?? 'Serviço', style: const TextStyle(color: Colors.grey, fontSize: 11), maxLines: 1),
+                    const SizedBox(height: 8),
+                    Text(dt != null ? DateFormat('dd/MM - HH:mm').format(dt) : '', style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold)),
+                  ],
+                ),
+              );
+            },
+          ),
+        ),
+      ],
+    );
   }
 }
